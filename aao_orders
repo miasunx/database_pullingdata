@@ -1,0 +1,16 @@
+select oli.po_id, oli.order_id, oli.line_item_id, oli.product_id, oli.order_status, 
+	            date(oli.order_ts_est) AS order_date,date(oli.ship_date_ts) AS ship_date, oli.line_item_status,
+	            sum(oli.sales_price) AS sales_price, sum(oli.line_item_tax_amt) as tax
+	 			from edw.fact_order_line_items oli
+	 			where date(oli.order_ts_est) >= '2021-12-01' and oli.is_active = 1 and lower(oli.product_id) not like 'ti%'
+	            and oli.country_cd like 'us%' and oli.order_status <> ALL (ARRAY['initiated'::varchar(9), 'accepted'::varchar(8)])
+				group by oli.po_id, oli.order_id, oli.line_item_id, oli.product_id,
+	            oli.order_status, date(oli.order_ts_est),date(oli.ship_date_ts),oli.line_item_status) oli on (folie.order_id = oli.order_id)-- and folie.line_item_id = oli.line_item_id)  
+	        join (select order_id,
+            	CASE WHEN (o.version = 'v4'::varchar(2) AND o.payment_method ~~ 'carrier%'::varchar(8)) THEN 'b2c'::varchar(6) 
+            	WHEN (o.version = 'v4'::varchar(2) AND o.payment_gateway ~~ 'carrier%'::varchar(8)) THEN 'b2c'::varchar(6) 
+            	ELSE o.order_type::varchar(30) END AS order_type
+            	from edw.fact_orders o where o.is_active = 1 and o.country_cd ~~ 'us%'::varchar(3) 
+            	and o.order_dt >= '2021-12-01'::date and version = 'v4'::varchar(2)
+				) o on o.order_id = oli.order_id 
+            ) orders
